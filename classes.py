@@ -1,6 +1,8 @@
 from enum import Enum
 import json
 
+from copy import shallowcopy
+
 import os
 
 from datetime import datetime, timedelta, time
@@ -8,6 +10,8 @@ from tzlocal import get_localzone
 
 from gcsa.event import Event
 from gcsa.google_calendar import GoogleCalendar
+
+# TODO: organise imports
 
 google_account = "" # simply a working email which is organised by oauth
 with open("config.json", "r") as f:
@@ -46,7 +50,7 @@ class Task:
     def __init__(self, name, desc, minutes, due):
         # time will be in minutes, just an integer
         self.length = timedelta(minutes=minutes)
-        self.due = due
+        self.due = due # this is an optional parameter, if it doesn't exist then there is no time limit for this task
         self.name = name
         self.desc = desc
     
@@ -56,6 +60,7 @@ class Task:
 class Calendar:
     def __init__(self, active_time, inactive_time):
         self.tasks_by_due = []
+        self.tasks_pending = []
 
         self.link = GoogleCalendar(google_account) # link to google
 
@@ -71,6 +76,9 @@ class Calendar:
         print(self.events)
     
     def get_events(self):
+        """
+        Get all upcoming events from Google Calendar which are not tasks managed by this app.
+        """
         events = []
 
         for event in sorted(self.link.get_events()):
@@ -80,6 +88,10 @@ class Calendar:
         return events
     
     def get_tasks(self, delete=False):
+        """
+        Get all upcoming tasks from Google calendar which are managed by this app.
+        TODO: deprecate this and use events.json to get events managed by this app.
+        """
         tasks = []
 
         for event in self.link:
@@ -92,6 +104,9 @@ class Calendar:
         return tasks
 
     def insert_task(self, task):
+        """
+        Inserts a Task object into the to-do list.
+        """
         inserted = False
         for i,v in enumerate(self.tasks_by_due):
             if v.due > task.due:
@@ -194,6 +209,9 @@ class Calendar:
         return task_list
 
     def upload_task_list(self,task_list):
+        """
+        Takes a List[Tuple[datetime, Task]] and uploads all tasks as events onto Google Calendar.
+        """
         for time,task in task_list:
             event = Event(start=time,end=time+task.length,description=task.desc+tag,color_id=GCColour.TOMATO.value,summary=task.name)
 
@@ -205,6 +223,9 @@ class Calendar:
             f.write(json.dumps(self.uploaded_events))
 
     def get_uploaded_tasks(self, filterCompleted=False):
+        """
+        Gets all uploaded tasks as GCSA Events and returns them as a list
+        """
         tasks = []
 
         for event_id in self.uploaded_events:
@@ -217,19 +238,35 @@ class Calendar:
 
         return tasks
 
+    def reload_tasks(self, tasks):
+        """
+        Reorganises the calendar according to the current event layout.
+        """
+        if tasks is None:
+            return
+        
+        for task in self.get_uploaded_tasks(True):
+            self.link.delete_event(task)
+
+            self.uploaded_events.remove(task.event_id)
+        
+        self.upload_task_list(self.tasks_by_due) # work out what tasks_by_due holds, and how to get the full accurate task list
+
+
+
                 
-# cheeky little test case
+# # cheeky little test case
 
-c = Calendar(time(hour=7), time(hour=18))
+# c = Calendar(time(hour=7), time(hour=18))
 
-t1 = Task("not important", "do something", 60,0)
-t2 = Task("pop method", "pop 1 singular method", 30,0)
-t3 = Task("poop", "take a poo", 120,0)
+# t1 = Task("not important", "do something", 60,0)
+# t2 = Task("pop method", "pop 1 singular method", 30,0)
+# t3 = Task("poop", "take a poo", 120,0)
 
-c.insert_task(t1)
-c.insert_task(t2)
-c.insert_task(t3)
+# c.insert_task(t1)
+# c.insert_task(t2)
+# c.insert_task(t3)
 
-tl = c.organise_calendar()
+# tl = c.organise_calendar()
 
-c.upload_task_list(tl)
+# c.upload_task_list(tl)
