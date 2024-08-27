@@ -1,6 +1,8 @@
 from enum import Enum
 import json
 
+import os
+
 from datetime import datetime, timedelta, time
 from tzlocal import get_localzone
 
@@ -59,6 +61,11 @@ class Calendar:
 
         self.log_on = active_time # this should be a datetime object of the time when you start being active
         self.log_off = inactive_time
+
+        self.uploaded_events = [] # needs to be saved, list of event ids
+        if os.path.isfile("events.json"):
+            with open("events.json", "r") as f:
+                self.uploaded_events = json.loads(f.read())
 
         self.events = self.get_events()
         print(self.events)
@@ -190,8 +197,25 @@ class Calendar:
         for time,task in task_list:
             event = Event(start=time,end=time+task.length,description=task.desc+tag,color_id=GCColour.TOMATO.value,summary=task.name)
 
-            self.link.add_event(event)
+            event = self.link.add_event(event)
 
+            self.uploaded_events.append(event.event_id)
+        
+        with open("events.json", "w") as f:
+            f.write(json.dumps(self.uploaded_events))
+
+    def get_uploaded_tasks(self, filterCompleted=False):
+        tasks = []
+
+        for event_id in self.uploaded_events:
+            task = self.link.get_event(event_id)
+            if filterCompleted and task.color_id in [GCColour.BASIL.value, GCColour.SAGE.value]:
+                # it's completed (marked as green), skip it
+                continue
+            
+            tasks.append(task)
+
+        return tasks
 
                 
 # cheeky little test case
