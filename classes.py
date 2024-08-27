@@ -198,14 +198,23 @@ class Calendar:
 
         Inserts a Task object into the to-do list.
         """
+        if v.due is None:
+            self.tasks_by_due.append(task)
+            return
+        
         inserted = False
         for i,v in enumerate(self.tasks_by_due):
+            if v.due is None:
+                inserted = i
+                break
+
             if v.due > task.due:
                 self.tasks_by_due.insert(i,task)
                 inserted = True
                 break
         
-        if inserted is False: self.tasks_by_due.append(task)
+        if inserted is not True:
+            self.tasks_by_due.insert(inserted,task) # the index in which the tasks start to have no due date
     
     def merge_pending(self):
         for _ in self.tasks_pending:
@@ -273,6 +282,8 @@ class Calendar:
         To be implemented in order of priority:
         1) (Assuming all tasks are assignable easily in the order by due date) lay out all tasks by due date. ✅
         2) Lay out all tasks by due date if tasks can be switched around and still give a valid layout. (ex: short task taking up space on day 2 when day 1 has a gap free for it)
+            - do 2 layers of recursion, in which we heuristically swap two random events, check the layout's validity and keep going#
+            - if this fails, move onto step 3
         3) Split up tasks into smaller segments (if needed and opted in)
         4) If the layout isn't possible and you're swamped, extend log_off time by increments of 30 minutes (includes log_off time being technically before log_on time, if log_off is 2am and log_on is 7am)
         """
@@ -370,7 +381,6 @@ class Calendar:
         
         # if the time is in the middle of a task, organise_calendar will shift this task along infinitely and we don't want that to happen
         # redesign organise_calendar to fit this description
-
 
 
                 
