@@ -67,7 +67,7 @@ class Task:
             "desc": self.desc
         }
 
-        mins = self.length.total_seconds()
+        mins = self.length.total_seconds() / 60
         d["length"] = round(mins)
 
         if self.due is not None:
@@ -505,27 +505,3 @@ class Calendar:
         self.upload_task_list(task_list)
 
         # done!
-
-
-                
-# cheeky little test case
-
-c = Calendar(time(hour=7), time(hour=18))
-
-t1 = Task("do maths", "nothing", 60)
-t2 = Task("do coding", "nothing", 30)
-t3 = Task("do freddie wear", "freaky", 120)
-
-c.insert_task(t1)
-c.insert_task(t2)
-c.insert_task(t3)
-
-c.start()
-
-from time import sleep
-
-while True:
-    for i in range(3):
-        sleep(1)
-        print(i+1)
-    c.reload_tasks() # refresh the calendar every minute, checking for new events which would interrupt the current tasks
