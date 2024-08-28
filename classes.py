@@ -55,6 +55,8 @@ class Task:
         self.due = due # this is an optional parameter, if it doesn't exist then there is no time limit for this task
         self.name = name
         self.desc = desc
+
+# TODO: TASK TO DO AFTER A CERTAIN DATE
     
     def __repr__(self):
         return f"Task({self.name}, {self.desc})"
@@ -121,7 +123,6 @@ class Calendar:
                         for item in value: # value is here a list[task]
                             task = Task.from_obj(item)
                             self.tasks_pending.append(task)
-                            self.tasks_by_due.append(task)
                     else:
                         task = Task.from_obj(value)
                         self.tasks_by_due.append(task)
@@ -129,7 +130,9 @@ class Calendar:
                         self.uploaded_events.append((key,task))
 
         self.events = self.get_events()
-        self.reload_tasks() # we're back in the business, add tasks that weren't already done, get going
+    
+    def start(self):
+        self.reload_tasks()
     
     def save_events(self):
         # { event_id: event, ... , not_uploaded: [event, ...]}
@@ -153,7 +156,7 @@ class Calendar:
         obj["not_uploaded"] = [x.obj() for x in tasks]
 
         for i,task in self.uploaded_events:
-            obj[i] = task
+            obj[i] = task.obj()
         
         # now save
 
@@ -173,6 +176,9 @@ class Calendar:
                 events.append(event)
         
         return events
+
+    def update_events(self):
+        self.events = self.get_events()
     
     def get_tasks(self, delete=False):
         """
@@ -198,7 +204,7 @@ class Calendar:
 
         Inserts a Task object into the to-do list.
         """
-        if v.due is None:
+        if task.due is None:
             self.tasks_by_due.append(task)
             return
         
@@ -239,9 +245,9 @@ class Calendar:
         """
         for task, event in self.get_uploaded_tasks():
             if event.start is not None and event.end is not None:
-                length = round((event.end - event.start).total_seconds / 60)
+                length = round((event.end - event.start).total_seconds() / 60)
 
-                if length != round(task.length.total_seconds / 60):
+                if length != round(task.length.total_seconds() / 60):
                     task.length = timedelta(minutes=length)
             
             if event.summary != task.name:
@@ -265,7 +271,7 @@ class Calendar:
 
         for event_id, task in self.uploaded_events:
             event = self.link.get_event(event_id)
-            if filterCompleted and task.color_id in [GCColour.BASIL.value, GCColour.SAGE.value]:
+            if filterCompleted and event.color_id in [GCColour.BASIL.value, GCColour.SAGE.value]:
                 # it's completed (marked as green), skip it
                 continue
             
@@ -273,7 +279,7 @@ class Calendar:
 
         return tasks
     
-    def organise_calendar(self):
+    def organise_calendar(self, starting_time = None, skipped_task = None):
         """
         DOES NOT MODIFY self.tasks_by_due
 
@@ -287,36 +293,37 @@ class Calendar:
         3) Split up tasks into smaller segments (if needed and opted in)
         4) If the layout isn't possible and you're swamped, extend log_off time by increments of 30 minutes (includes log_off time being technically before log_on time, if log_off is 2am and log_on is 7am)
         """
-        
-        self.merge_pending() # get up to speed on all tasks
 
         # let's find the first active moment that's a multiple of 15 minutes after when this is being run
 
-        now = datetime.now(local_timezone) 
-        fifteen_minutes = timedelta(minutes=15)
+        if starting_time is None:
+            now = datetime.now(local_timezone) 
+            fifteen_minutes = timedelta(minutes=15)
 
-        current_minute = now.minute
-        if current_minute % 15 != 0:
-            # i couldn't think of a better way to do this
-            for i in range(15):
-                current_minute -= 1
-                if current_minute % 15 == 0:
-                    break
-        
-        now = now.replace(minute=current_minute,second=0,microsecond=0)
-        now += fifteen_minutes # this is now the first 15 minute starter
+            current_minute = now.minute
+            if current_minute % 15 != 0:
+                # i couldn't think of a better way to do this
+                for i in range(15):
+                    current_minute -= 1
+                    if current_minute % 15 == 0:
+                        break
+            
+            now = now.replace(minute=current_minute,second=0,microsecond=0)
+            now += fifteen_minutes # this is now the first 15 minute starter
 
-        now_time = now.time()
+            now_time = now.time()
 
-        if (now_time < self.log_on) or (now_time > self.log_off): # this assumes that if placed on the same day, log_on would be before log_off
-            # we're in inactive hours, skip ahead to you logging on
+            if (now_time < self.log_on) or (now_time > self.log_off): # this assumes that if placed on the same day, log_on would be before log_off
+                # we're in inactive hours, skip ahead to you logging on
 
-            while (now_time < self.log_on) or (now_time > self.log_off):
-                # continue adding 15 minutes until it is a valid time
-                now += fifteen_minutes
-                now_time = now.time()
-        
-        # now_time is now a valid time to try the place to calendar logic
+                while (now_time < self.log_on) or (now_time > self.log_off):
+                    # continue adding 15 minutes until it is a valid time
+                    now += fifteen_minutes
+                    now_time = now.time()
+            
+            # now_time is now a valid time to try the place to calendar logic
+        else:
+            now_time = starting_time
         
         working_time = contextualise(now_time, now)
 
@@ -329,6 +336,10 @@ class Calendar:
         for i in range(len(tasks_by_due)):
             task = tasks_by_due.pop(0)
 
+            if task == skipped_task:
+                continue
+                # task doesn't make it onto the task_list
+
             while True: # logic to break is too complicated to be handled in a statement
                 valid = True
 
@@ -340,7 +351,6 @@ class Calendar:
                 # if the starting time of the event we are on is after end, then we can break the loop (iterating through events is hard when it goes through the next year's worth)
 
                 for event in self.events:
-                    print(event, event.start, event.end, working_time, "event loop")
                     # check for collisions as described above
                     if times_intersect(working_time, end, event.start, event.end):
                         valid = False
@@ -374,7 +384,7 @@ class Calendar:
         
         return task_list
 
-    def reload_tasks(self, tasks): # TODO:
+    def reload_tasks(self):
         """
         Reorganises the calendar according to the current event layout.
         """
@@ -382,20 +392,140 @@ class Calendar:
         # if the time is in the middle of a task, organise_calendar will shift this task along infinitely and we don't want that to happen
         # redesign organise_calendar to fit this description
 
+        self.merge_pending() # now the entire list is back together and happy
+        self.check_event_updates() # now we're up to date with the server
+        self.update_events() # ""
+
+        # find the event that is currently being done. if multiple are currently ongoing, pick the one that started first, and if they both started first, pick the one that ends the first. if then necessary, pick the one with the earliest name alphabetically.
+
+        now = datetime.now(local_timezone)
+
+        matches = []
+        for task, event in self.get_uploaded_tasks(True):
+            # if the task isn't completed and we are currently in the middle of it, attach it as a match
+
+            if event.end > now and event.start <= now:
+                matches.append((task,event))
+        
+        currently_doing = None
+        
+        if len(matches) > 1:
+            result1 = sorted(matches, key=lambda x: x[1].start)
+            
+            starting_time = None
+            result2 = []
+            for task, event in result1:
+                if starting_time is None:
+                    starting_time = event.start
+                    result2.append((task,event))
+                else:
+                    if event.start == starting_time:
+                        result2.append((task,event))
+                    else:
+                        break
+            
+            if len(result2) > 1:
+                result3 = sorted(result2, key=lambda x: x[1].end)
+
+                ending_time = None
+                result4 = []
+                for task, event in result3:
+                    if ending_time is None:
+                        ending_time = event.end
+                        result4.append((task,event))
+                    else:
+                        if event.end == ending_time:
+                            result4.append((task,event))
+                        else:
+                            break
+                
+                if len(result4) > 1:
+                    result5 = sorted(result4, key=lambda x: x[1].summary)
+
+                    matches = [result5[0]]
+            else:
+                matches = result2
+        
+        if len(matches) == 1:
+            currently_doing = matches[0]
+        
+        # now we have the currently doing event if it exists, we can now try reorganise
+
+        if currently_doing is None:
+            task_list = self.organise_calendar()
+        else:
+            # custom organise in which the starting_time is determined, as well as the first task being removed
+            starting_time = currently_doing.end # start when this ends
+            
+            task_list = self.organise_calendar(starting_time=starting_time, skipped_task=currently_doing)
+        
+        print(task_list)
+        
+        # now check the task list timings against the uploaded ones
+
+        deleted_events = []
+        for task1, event in self.get_uploaded_tasks(False):
+            i = 0
+            found = False
+            for time, task2 in task_list:
+                # Only if the tasks are exactly equivalent and the uploaded event matches task2 will we skip uploading this
+                # In that case remove this item from task list, and do not add it to be deleted
+
+                if task1 == task2 and task2.name == event.summary and task2.length == (event.end - event.start) and task2.desc + tag == event.description and time == event.start:
+                    task_list.pop(i)
+
+                    # match has been found
+                    found = True
+                    break
+                
+                i += 1
+            
+            if found is False:
+                deleted_events.append(event.event_id)
+        
+        # now delete all the events that didn't match
+
+        print(task_list,deleted_events)
+
+        for event_id in deleted_events:
+            self.link.delete_event(event_id)
+
+            # remove these uploaded events from the uploaded events list as well
+
+            i=0
+            for eid, task in self.uploaded_events:
+                if eid == event_id:
+                    self.uploaded_events.pop(i)
+                    continue # i would be incremented but then the list length shortens
+
+                i+=1
+        
+        # now upload task list
+
+        self.upload_task_list(task_list)
+
+        # done!
+
 
                 
-# # cheeky little test case
+# cheeky little test case
 
-# c = Calendar(time(hour=7), time(hour=18))
+c = Calendar(time(hour=7), time(hour=18))
 
-# t1 = Task("not important", "do something", 60,0)
-# t2 = Task("pop method", "pop 1 singular method", 30,0)
-# t3 = Task("poop", "take a poo", 120,0)
+t1 = Task("do maths", "nothing", 60)
+t2 = Task("do coding", "nothing", 30)
+t3 = Task("do freddie wear", "freaky", 120)
 
-# c.insert_task(t1)
-# c.insert_task(t2)
-# c.insert_task(t3)
+c.insert_task(t1)
+c.insert_task(t2)
+c.insert_task(t3)
 
-# tl = c.organise_calendar()
+c.start()
 
-# c.upload_task_list(tl)
+from time import sleep
+
+while True:
+    for i in range(3):
+        sleep(1)
+        print(i+1)
+    c.reload_tasks() # refresh the calendar every minute, checking for new events which would interrupt the current tasks
