@@ -96,7 +96,7 @@ class Task:
 
     def __eq__(self,other):
         if isinstance(other, Task):
-            return self.name == other.name and self.desc == other.desc and self.length == other.length and self.due == other.due
+            return self.name == other.name and self.desc == other.desc and self.length == other.length # and self.due == other.due
 
         return False
 
@@ -136,24 +136,11 @@ class Calendar:
     
     def save_events(self):
         # { event_id: event, ... , not_uploaded: [event, ...]}
-        obj = {"not_uploaded": []}
+        obj = {}
 
         # merge tasks_by_due and tasks_pending
-        tasks = copy(self.tasks_by_due)
-        for task in self.tasks_pending:
-            if task in tasks:
-                continue
-
-            tasks.append(task)
         
-        # now check collisions with self.uploaded_events
-        uploaded_tasks = [x[1] for x in self.uploaded_events]
-
-        for i, task in enumerate(tasks):
-            if task in uploaded_tasks:
-                tasks.pop(i)
-        
-        obj["not_uploaded"] = [x.obj() for x in tasks]
+        obj["not_uploaded"] = [x.obj() for x in self.tasks_pending]
 
         for i,task in self.uploaded_events:
             obj[i] = task.obj()
@@ -296,9 +283,9 @@ class Calendar:
 
         # let's find the first active moment that's a multiple of 15 minutes after when this is being run
 
+        fifteen_minutes = timedelta(minutes=15)
         if starting_time is None:
             now = datetime.now(local_timezone) 
-            fifteen_minutes = timedelta(minutes=15)
 
             current_minute = now.minute
             if current_minute % 15 != 0:
@@ -321,11 +308,9 @@ class Calendar:
                     now += fifteen_minutes
                     now_time = now.time()
             
-            # now_time is now a valid time to try the place to calendar logic
+            working_time = contextualise(now_time, now)
         else:
-            now_time = starting_time
-        
-        working_time = contextualise(now_time, now)
+            working_time = starting_time
 
         task_list = [] # tuple(time: starting_time, task: task assigned to this time)
 
@@ -333,9 +318,10 @@ class Calendar:
 
         tasks_by_due = copy(self.tasks_by_due)
 
-        for i in range(len(tasks_by_due)):
+        for _ in range(len(tasks_by_due)):
             task = tasks_by_due.pop(0)
 
+            print("task, skipped task", task, skipped_task)   
             if task == skipped_task:
                 continue
                 # task doesn't make it onto the task_list
@@ -455,16 +441,19 @@ class Calendar:
             task_list = self.organise_calendar()
         else:
             # custom organise in which the starting_time is determined, as well as the first task being removed
-            starting_time = currently_doing.end # start when this ends
+            starting_time = currently_doing[1].end # start when this ends
             
-            task_list = self.organise_calendar(starting_time=starting_time, skipped_task=currently_doing)
+            task_list = self.organise_calendar(starting_time=starting_time, skipped_task=currently_doing[0])
         
-        print(task_list)
+        print("approved task list when reloading",task_list)
         
         # now check the task list timings against the uploaded ones
 
         deleted_events = []
         for task1, event in self.get_uploaded_tasks(False):
+            if currently_doing is not None and task1 == currently_doing[0]:
+                continue
+
             i = 0
             found = False
             for time, task2 in task_list:
@@ -485,7 +474,7 @@ class Calendar:
         
         # now delete all the events that didn't match
 
-        print(task_list,deleted_events)
+        print("remaining task list, deleted event ids",task_list,deleted_events)
 
         for event_id in deleted_events:
             self.link.delete_event(event_id)
@@ -503,5 +492,7 @@ class Calendar:
         # now upload task list
 
         self.upload_task_list(task_list)
+
+        self.save_events()
 
         # done!

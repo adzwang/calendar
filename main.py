@@ -20,12 +20,15 @@ with open("config.json", "r") as f:
     log_off = parse_time(data["log_off"])
 
 calendar = Calendar(log_on, log_off)
+calendar.start()
+
+refresh_rate = 5
 
 # we have our calendar, deal with a refresh loop
 
 def refresh():
     while True:
-        sleep(60)
+        sleep(refresh_rate)
         calendar.reload_tasks() # refresh the calendar every minute, checking for new events which would interrupt the current tasks
 
 def int_input(string):
