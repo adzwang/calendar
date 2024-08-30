@@ -1,6 +1,8 @@
 from enum import Enum
 import json
 
+import requests
+
 from copy import copy # already shallowcopy
 
 import os
@@ -47,6 +49,13 @@ def contextualise(time, date):
     """
     return date.replace(hour=time.hour,minute=time.minute,second=time.second)
 
+class NotifyRun:
+    def __init__(self,url):
+        self.url = url
+    
+    def send(self,content):
+        r=requests.post(url=self.url,data=content)
+        print(r.status_code, r.text)
 
 class Task:
     def __init__(self, name, desc="", minutes=60, due=None):
