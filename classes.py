@@ -15,14 +15,17 @@ from gcsa.google_calendar import GoogleCalendar
 
 # TODO: organise imports
 
+config = None
 google_account = "" # simply a working email which is organised by oauth
 with open("config.json", "r") as f:
-    google_account = json.loads(f.read())["email"]
+    config = json.loads(f.read())
+    google_account = config["email"]
 
 tag = "#auto"
 local_timezone = get_localzone()
 
 default_task_length = 30 # for me, when i think of something i might want to do it's research that thing and 30 minutes should be fine
+notify_before_warning = 5 # 5 minutes before, remind you to change the colour
 
 class GCColour(Enum):
     TOMATO = 11
@@ -110,7 +113,7 @@ class Task:
         return False
 
 class Calendar:
-    def __init__(self, active_time, inactive_time):
+    def __init__(self, active_time, inactive_time, refresh_rate=5, notify_run_client=None):
         self.tasks_by_due = [] # every minute all of these are rechecked and uploaded
         self.tasks_pending = [] # in between the minute checks, if tasks are added in between they are placed on pending until the next refresh session
 
@@ -121,6 +124,12 @@ class Calendar:
 
         self.log_on = active_time # this should be a datetime object of the time when you start being active
         self.log_off = inactive_time
+
+        self.refresh_rate = refresh_rate # just needed for the notification system
+        self.notify = notify_run_client
+
+        if self.notify is None:
+            self.notify = NotifyRun(config["notify_run_url"])
 
         self.uploaded_events = [] # needs to be saved, list of Tuple(event_id, event)
         if os.path.isfile("events.json"):
@@ -453,6 +462,23 @@ class Calendar:
             starting_time = currently_doing[1].end # start when this ends
             
             task_list = self.organise_calendar(starting_time=starting_time, skipped_task=currently_doing[0])
+
+            # let's make the check now to see if we're in the time period to notify
+
+            notify_time = starting_time - timedelta(minutes=notify_before_warning)
+            td = timedelta(seconds=(self.refresh_rate+1)/2)
+
+            lbound = notify_time - td
+            ubound = notify_time + td
+
+            current_time = datetime.now(local_timezone) 
+            if lbound <= current_time and current_time <= ubound:
+                # if the task is still red
+                if currently_doing.color_id == GCColour.TOMATO.value:
+                    # send notification
+
+                    self.notify.send(f"Your current task ends in 5 minutes. If you have completed it, change it to green now.")
+
         
         print("approved task list when reloading",task_list)
         
