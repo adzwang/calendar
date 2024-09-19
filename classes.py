@@ -58,7 +58,6 @@ class NotifyRun:
     
     def send(self,content):
         r=requests.post(url=self.url,data=content)
-        print(r.status_code, r.text)
 
 class Task:
     def __init__(self, name, desc="", minutes=60, due=None):
@@ -339,7 +338,6 @@ class Calendar:
         for _ in range(len(tasks_by_due)):
             task = tasks_by_due.pop(0)
 
-            print("task, skipped task", task, skipped_task)   
             if task == skipped_task:
                 continue
                 # task doesn't make it onto the task_list

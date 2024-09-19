@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<head>
+
+</head>
+<body>
+    <h1>Calendar task input</h1>
+    <form action="/upload" method="post">
+        <label>Name</label><br>
+        <input type="text" id="name" name="name" placeholder="Name" required/><br>
+        <label>Description</label><br>
+        <input type="text" id="desc" name="desc" placeholder="Description" required/><br>
+        <label>Time taken (minutes)</label><br>
+        <input type="number" id="time" name="time" placeholder="30 (minutes)" required/><br>
+        <label>Due date</label><br>
+        <input type="datetime-local" id="due" name="due" required/><br><br>
+        <input type="password" id="password" name="password" placeholder="Password" required/><br><br>
+        <input type="submit" value="Submit" />
+    </form>
+</body>
