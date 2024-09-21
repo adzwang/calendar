@@ -86,7 +86,6 @@ import sys
 import signal
 
 def handler(signal, frame):
-    print("ctrl c pressed!")
     closed.set()
     sys.exit(0)
 signal.signal(signal.SIGINT, handler)

@@ -5,6 +5,8 @@ import requests
 
 from copy import copy # already shallowcopy
 
+from google.oauth2 import service_account
+
 import os
 
 from datetime import datetime, timedelta, time
@@ -12,6 +14,7 @@ from tzlocal import get_localzone
 
 from gcsa.event import Event
 from gcsa.google_calendar import GoogleCalendar
+from gcsa.acl import AccessControlRule, ACLRole, ACLScopeType
 
 # TODO: organise imports
 
@@ -26,6 +29,27 @@ local_timezone = get_localzone()
 
 default_task_length = 30 # for me, when i think of something i might want to do it's research that thing and 30 minutes should be fine
 notify_before_warning = 5 # 5 minutes before, remind you to change the colour
+
+# rewrite _get_default_credentials_path to allow for the import of service account credentials while not tampering with the library
+
+def get_service_account_file():
+    home_dir = os.path.expanduser("~")
+    credential_dir = os.path.join(home_dir, ".credentials")
+    
+    if not os.path.exists(credential_dir):
+        raise FileNotFoundError(f'Default credentials directory "{credential_dir}" does not exist.')
+    
+    credential_path = os.path.join(credential_dir, config["service_account_file_name"])
+
+    return credential_path
+
+def load_service_account_credentials():
+    SERVICE_ACCOUNT_FILE = get_service_account_file()
+
+    SCOPES = ["https://www.googleapis.com/auth/calendar"]
+    token = service_account.Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+
+    return token
 
 class GCColour(Enum):
     TOMATO = 11
@@ -119,7 +143,7 @@ class Calendar:
         # the idea of the tasks_pending is so that if the program crashes in between uploads while tasks are trying to be uploaded, they will be saved as not_uploaded
         # every time tasks_pending is added to, a save should be triggered so that next time the program is ran, it will know to refresh
 
-        self.link = GoogleCalendar(google_account) # link to google
+        self.link = GoogleCalendar(google_account, credentials=load_service_account_credentials()) # link to google
 
         self.log_on = active_time # this should be a datetime object of the time when you start being active
         self.log_off = inactive_time
@@ -476,9 +500,6 @@ class Calendar:
                     # send notification
 
                     self.notify.send(f"Your current task ends in 5 minutes. If you have completed it, change it to green now.")
-
-        
-        print("approved task list when reloading",task_list)
         
         # now check the task list timings against the uploaded ones
 
@@ -506,8 +527,6 @@ class Calendar:
                 deleted_events.append(event.event_id)
         
         # now delete all the events that didn't match
-
-        print("remaining task list, deleted event ids",task_list,deleted_events)
 
         for event_id in deleted_events:
             self.link.delete_event(event_id)
