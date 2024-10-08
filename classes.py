@@ -19,10 +19,13 @@ from gcsa.acl import AccessControlRule, ACLRole, ACLScopeType
 # TODO: organise imports
 
 config = None
-google_account = "" # simply a working email which is organised by oauth
+write_calendar = "" # simply a working email which is organised by oauth
+read_calendars = []
+
 with open("config.json", "r") as f:
     config = json.loads(f.read())
-    google_account = config["email"]
+    write_calendar = config["write_calendar"]
+    read_calendars = config["read_calendars"]
 
 tag = "#auto"
 local_timezone = get_localzone()
@@ -143,7 +146,12 @@ class Calendar:
         # the idea of the tasks_pending is so that if the program crashes in between uploads while tasks are trying to be uploaded, they will be saved as not_uploaded
         # every time tasks_pending is added to, a save should be triggered so that next time the program is ran, it will know to refresh
 
-        self.link = GoogleCalendar(google_account, credentials=load_service_account_credentials()) # link to google
+        self.link = GoogleCalendar(write_calendar, credentials=load_service_account_credentials()) # link to google
+
+        self.calendars = []
+
+        for calendar in read_calendars:
+            self.calendars.append(GoogleCalendar(calendar, credentials=load_service_account_credentials())) # a bunch of calendars which will be read from for events
 
         self.log_on = active_time # this should be a datetime object of the time when you start being active
         self.log_off = inactive_time
@@ -172,6 +180,9 @@ class Calendar:
 
         self.events = self.get_events()
     
+    def check_access_token():
+        pass
+    
     def start(self):
         self.reload_tasks()
     
@@ -199,9 +210,12 @@ class Calendar:
         """
         events = []
 
-        for event in sorted(self.link.get_events()):
-            if not (event.description is not None and event.description.endswith(tag)):
-                events.append(event)
+        for link in self.calendars:
+            for event in sorted(link.get_events()):
+                if not (event.description is not None and event.description.endswith(tag)):
+                    events.append(event)
+            
+        print(len(events))
         
         return events
 
